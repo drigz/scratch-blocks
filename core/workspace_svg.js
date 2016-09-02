@@ -817,6 +817,7 @@ Blockly.WorkspaceSvg.prototype.isDeleteArea = function(e) {
 Blockly.WorkspaceSvg.prototype.onMouseDown_ = function(e) {
   this.markFocused();
   if (Blockly.isTargetInput_(e)) {
+    Blockly.clearTouchIdentifier();
     return;
   }
   Blockly.terminateDrag_();  // In case mouse-up event was lost.
@@ -832,6 +833,7 @@ Blockly.WorkspaceSvg.prototype.onMouseDown_ = function(e) {
   if (Blockly.isRightButton(e)) {
     // Right-click.
     this.showContextMenu_(e);
+    Blockly.clearTouchIdentifier();
   } else if (this.scrollbar) {
     this.dragMode_ = Blockly.DRAG_BEGIN;
     // Record the current mouse position.

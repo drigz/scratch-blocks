@@ -630,7 +630,7 @@ Blockly.BlockSvg.prototype.tab = function(start, forward) {
 
 /**
  * Handle a mouse-down on an SVG block.
- * @param {!Event} e Mouse down event.
+ * @param {!Event} e Mouse down event or touch start event.
  * @private
  */
 Blockly.BlockSvg.prototype.onMouseDown_ = function(e) {
@@ -638,6 +638,16 @@ Blockly.BlockSvg.prototype.onMouseDown_ = function(e) {
     return;
   }
   if (this.isInFlyout) {
+    // longStart's simulation of right-clicks for longpresses on touch devices
+    // calls the object's onMouseDown, so its code path passes through here only
+    // on touch.
+    // definitely want to show the context menu, clear touch identifier, etc.
+    // what about hideChaff, select, and so on?
+    if (e.type == 'touchstart' && Blockly.isRightButton(e)) {
+      Blockly.Flyout.blockRightClick_(e, this);
+      e.stopPropagation();
+      e.preventDefault();
+    }
     return;
   }
   if (this.isInMutator) {
@@ -655,6 +665,8 @@ Blockly.BlockSvg.prototype.onMouseDown_ = function(e) {
   if (Blockly.isRightButton(e)) {
     // Right-click.
     this.showContextMenu_(e);
+    // Click, not drag, so stop waiting for other touches from this identifier.
+    Blockly.clearTouchIdentifier();
   } else if (!this.isMovable()) {
     // Allow immovable blocks to be selected and context menued, but not
     // dragged.  Let this event bubble up to document, so the workspace may be
@@ -698,6 +710,7 @@ Blockly.BlockSvg.prototype.onMouseDown_ = function(e) {
  * @private
  */
 Blockly.BlockSvg.prototype.onMouseUp_ = function(e) {
+  Blockly.clearTouchIdentifier();
   // A field is being edited if either the WidgetDiv or DropDownDiv is currently open.
   // If a field is being edited, don't fire any click events.
   var fieldEditing = Blockly.WidgetDiv.isVisible() || Blockly.DropDownDiv.isVisible();

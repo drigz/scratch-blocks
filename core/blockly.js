@@ -157,6 +157,13 @@ Blockly.dragMode_ = Blockly.DRAG_NONE;
 Blockly.onTouchUpWrapper_ = null;
 
 /**
+ * Which touch events are we currently paying attention to?
+ * @type {DOMString}
+ * @private
+ */
+Blockly.touchIdentifier_ = null;
+
+/**
  * Convert a hue (HSV model) into an RGB hex triplet.
  * @param {number} hue Hue on a colour wheel (0-360).
  * @return {string} RGB code, e.g. '#5ba65b'.
@@ -183,6 +190,68 @@ Blockly.svgSize = function(svg) {
  */
 Blockly.resizeSvgContents = function(workspace) {
   workspace.resizeContents();
+};
+
+/**
+ * Clear the touch identifier that tracks which touch stream to pay attention
+ * to.
+ */
+Blockly.clearTouchIdentifier = function() {
+  console.trace('\tclearing touch identifier');
+  if (Blockly.touchIdentifier_ == null) {
+    console.log('\t\ttouch identifier was already null');
+  }
+  Blockly.touchIdentifier_ = null;
+};
+
+/**
+ * Decide whether Blockly should handle or ignore this event.
+ * Mouse and touch events require special checks because we only want to deal
+ * with one touch stream at a time.  All other events should always be handled.
+ * @param {!Event} e The event to check.
+ * @return {boolean} True if this event should be passed through to the
+ *    registered handler; false if it should be blocked.
+ */
+Blockly.shouldHandleEvent = function(e) {
+  return !Blockly.isMouseOrTouchEvent(e) || Blockly.checkTouchIdentifier(e);
+};
+
+/**
+ * Check whether the touch identifier on the event matches the current saved
+ * identifier.  If there is no identifier, that means it's a mouse event and
+ * we'll use the identifier "mouse".  This means we won't deal well with
+ * multiple mice being used at the same time.  That seems okay.
+ * If the current identifier was unset, save the identifier from the
+ * event.
+ * @param {!Event} e Mouse event or touch event.
+ * @return {boolean} Whether the identifier on the event matches the current
+ *     saved identifier.
+ */
+Blockly.checkTouchIdentifier = function(e) {
+  var identifier = (e.changedTouches && e.changedTouches.item(0) &&
+      e.changedTouches.item(0).identifier != undefined &&
+      e.changedTouches.item(0).identifier != null) ?
+      e.changedTouches.item(0).identifier : 'mouse';
+
+  // if (Blockly.touchIdentifier_ )is insufficient because android touch
+  // identifiers may be zero.
+  if (Blockly.touchIdentifier_ != undefined &&
+      Blockly.touchIdentifier_ != null) {
+    // We're already tracking some touch/mouse event.  Is this from the same
+    // source?
+    return Blockly.touchIdentifier_ == identifier;
+  }
+  if (e.type == 'mousedown' || e.type == 'touchstart') {
+    // No identifier set yet, and this is the start of a drag.  Set it and
+    // return.
+    console.trace('setting touch identfier');
+    Blockly.touchIdentifier_ = identifier;
+    return true;
+  }
+  // There was no identifier yet, but this wasn't a start event so we're going
+  // to ignore it.  This probably means that another drag finished while this
+  // pointer was down.
+  return false;
 };
 
 /**
@@ -224,6 +293,10 @@ Blockly.svgResize = function(workspace) {
  */
 Blockly.onMouseUp_ = function(/*e*/) {
   var workspace = Blockly.getMainWorkspace();
+  if (workspace.dragMode_ == Blockly.DRAG_NONE) {
+    return;
+  }
+  Blockly.clearTouchIdentifier();
   Blockly.Css.setCursor(Blockly.Css.Cursor.OPEN);
   workspace.dragMode_ = Blockly.DRAG_NONE;
   // Unbind the touch event if it exists.
@@ -243,9 +316,6 @@ Blockly.onMouseUp_ = function(/*e*/) {
  * @private
  */
 Blockly.onMouseMove_ = function(e) {
-  if (e.touches && e.touches.length >= 2) {
-    return;  // Multi-touch gestures won't have e.clientX.
-  }
   var workspace = Blockly.getMainWorkspace();
   if (workspace.dragMode_ != Blockly.DRAG_NONE) {
     var dx = e.clientX - workspace.startDragMouseX;

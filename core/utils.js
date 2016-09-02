@@ -105,34 +105,40 @@ Blockly.hasClass_ = function(element, className) {
  * @return {!Array.<!Array>} Opaque data that can be passed to unbindEvent_.
  * @private
  */
-Blockly.bindEvent_ = function(node, name, thisObject, func) {
-  if (thisObject) {
-    var wrapFunc = function(e) {
-      func.call(thisObject, e);
-    };
-  } else {
-    var wrapFunc = func;
-  }
+Blockly.bindEvent_ = function(node, name, thisObject, func,
+    opt_noCaptureIdentifier) {
+  var wrapFunc = function(e) {
+    var captureIdentifier = !opt_noCaptureIdentifier;
+    // Handle each touch point separately.  If the event was a mouse event, this
+    // will hand back an array with one element, which we're fine handling.
+    var events = Blockly.bindEvent_.splitEventByTouches(e);
+    for (var i = 0, event; event = events[i]; i++) {
+      if (captureIdentifier && !Blockly.shouldHandleEvent(event)) {
+        return;
+      }
+      Blockly.bindEvent_.setClientFromTouch(event);
+      if (thisObject) {
+        func.call(thisObject, event);
+      } else {
+        func(event);
+      }
+    }
+  };
+
   node.addEventListener(name, wrapFunc, false);
   var bindData = [[node, name, wrapFunc]];
+
   // Add equivalent touch event.
   if (name in Blockly.bindEvent_.TOUCH_MAP) {
-    wrapFunc = function(e) {
-      // Punt on multitouch events.
-      if (e.changedTouches.length == 1) {
-        // Map the touch event's properties to the event.
-        var touchPoint = e.changedTouches[0];
-        e.clientX = touchPoint.clientX;
-        e.clientY = touchPoint.clientY;
-      }
-      func.call(thisObject, e);
+    var touchWrapFunc = function(e) {
+      wrapFunc(e);
       // Stop the browser from scrolling/zooming the page.
       e.preventDefault();
     };
     for (var i = 0, eventName;
          eventName = Blockly.bindEvent_.TOUCH_MAP[name][i]; i++) {
-      node.addEventListener(eventName, wrapFunc, false);
-      bindData.push([node, eventName, wrapFunc]);
+      node.addEventListener(eventName, touchWrapFunc, false);
+      bindData.push([node, eventName, touchWrapFunc]);
     }
   }
   return bindData;
@@ -151,6 +157,52 @@ if (goog.events.BrowserFeature.TOUCH_ENABLED) {
     'mouseup': ['touchend', 'touchcancel']
   };
 }
+
+/**
+ * Set an event's clientX and clientY from its first changed touch.  Use this to
+ * make a touch event work in a mouse event handler.
+ * @param {!Event} e A touch event.
+ */
+Blockly.bindEvent_.setClientFromTouch = function(e) {
+  if (e.type.indexOf('touch') == 0) {
+    // Map the touch event's properties to the event.
+    var touchPoint = e.changedTouches[0];
+    e.clientX = touchPoint.clientX;
+    e.clientY = touchPoint.clientY;
+  }
+};
+
+/**
+ * Check whether a given event is a mouse or touch event.
+ * @param {!Event} e An event.
+ * @return {boolean} true if it is a mouse or touch event; false otherwise.
+ */
+Blockly.isMouseOrTouchEvent = function(e) {
+  return e.type.indexOf('touch') == 0 || e.type.indexOf('mouse') == 0;
+};
+
+/**
+ * TODO (rachel-fenichel): consider moving all of this to touch.js
+ * Split an event into an array of events, one per changed touch or mouse
+ * point.
+ * @param {!Event} e A mouse event or a touch event with one or more changed
+ * touches.
+ * @return {!Array.<!Event>} An array of mouse or touch events.  Each touch
+ *     event will have exactly one changed touch.
+ */
+Blockly.bindEvent_.splitEventByTouches = function(e) {
+  var events = [];
+  if (e.changedTouches && e.changedTouches.length > 1) {
+    for (var i = 0; i < e.changedTouches.length; i++) {
+      var newEvent = new TouchEvent(e.type,
+          { 'changedTouches': [e.changedTouches[i]] });
+      events.push(newEvent);
+    }
+  } else {
+    events.push(e);
+  }
+  return events;
+};
 
 /**
  * Unbind one or more events event from a function call.
